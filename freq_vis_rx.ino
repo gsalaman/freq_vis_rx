@@ -1,6 +1,7 @@
 // This is the receive module for the frequency visualizer.
-// Next iteration:   display on 64x32, use mega.  XBee needs to go on Serial1 (pins 18 and 19)
-// Go to 21 bins for the cool rectangle effect, and 38400 baud on the xbee.
+// Brute force iteration:   display on 64x32, use mega.  Use  Serial1 (pins 18 and 19) for com with tx side.
+// Go to 21 bins for the cool rectangle effect.
+
 
 #include "SoftwareSerial.h"
   
@@ -71,7 +72,7 @@ void setup()
   matrix.begin();
   
   Serial.begin(9600);
-  Serial1.begin(115200);
+  Serial1.begin(38400);
 
   Serial.println("Freq RX initialized");
 }
@@ -184,7 +185,7 @@ void loop()
          if (buff_index == FREQ_BINS)
          {
             //print_freq_results();
-            display_freq_decay();
+            display_freq_raw();
             current_state = WAIT_FOR_BUFFER;
          }
       break;

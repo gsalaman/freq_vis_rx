@@ -1,6 +1,12 @@
 // This is the receive module for the frequency visualizer.
-// Next iteration:   display on 64x32, use mega.  XBee needs to go on Serial1 (pins 18 and 19)
-// Go to 21 bins for the cool rectangle effect, and 38400 baud on the xbee.
+// Next iteration:   display on 64x32, use mega.  Using Serial1 for com with tx side (pins 18 and 19)
+// Go to 21 bins for the cool rectangle effect.
+// Flow:  when we boot, send a "go" command to the tx side.
+// That then will collect data and send it to us.
+// We then display that data...this is gonna take under 40 ms.
+//  While that display is happening, the tx side will be collecting peak frequencies.
+// Then, once we've done displaying, we'll let the other side know we're ready for the next packet
+//     by sending another "go".
 
 #include "SoftwareSerial.h"
   
@@ -38,6 +44,7 @@ int freq[FREQ_BINS];
 int freq_hist[FREQ_BINS]={0};
 
 #define START_CHAR 's'
+#define GO_CHAR    'g'
 
 // Color pallete for spectrum...cooler than just single green.
 uint16_t spectrum_colors[] = 
@@ -74,6 +81,8 @@ void setup()
   Serial1.begin(115200);
 
   Serial.println("Freq RX initialized");
+
+  Serial1.print(GO_CHAR);
 }
 
 typedef enum
@@ -159,13 +168,33 @@ void display_freq_decay( void )
   matrix.swapBuffers(true);
  
 }
+
 void loop() 
 {
   char c;
   int buff_index;
+  static unsigned long active_time = 0;
+  unsigned long current_time;
+  
+  // if it's been a while since we've seen activity, send a "go"
+  // to the other side
+  #if 0
+  current_time = millis();
+  if (current_time > active_time + 1000)
+  {
+    Serial.println("Sending go");
+    Serial1.print(GO_CHAR);
+    active_time = current_time;
+  }
+  #endif
+
+  //Serial.println("Tick!");
   
   while (Serial1.available())
   {
+    // This counts as activity.
+    //active_time = current_time;
+    
     c = Serial1.read();
     
     switch (current_state)
@@ -173,18 +202,26 @@ void loop()
       case WAIT_FOR_BUFFER:
         if (c == START_CHAR)
         {
+          Serial.println("got a start char");
           buff_index = 0;
           current_state = PROCESS_BUFFER;
         }
       break;
 
       case PROCESS_BUFFER:
+         Serial.print("Char #");
+         Serial.println(buff_index);
+         
          freq[buff_index] = c;
          buff_index++;
          if (buff_index == FREQ_BINS)
          {
             //print_freq_results();
-            display_freq_decay();
+            display_freq_raw();
+
+            Serial.println("Got full buffer...sending next go");
+            
+            Serial1.print(GO_CHAR);
             current_state = WAIT_FOR_BUFFER;
          }
       break;

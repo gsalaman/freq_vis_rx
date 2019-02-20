@@ -1,5 +1,6 @@
 // This is the receive module for the frequency visualizer.
 // Next iteration:   display on 64x32, use mega.  XBee needs to go on Serial1 (pins 18 and 19)
+// Go to 21 bins for the cool rectangle effect, and 38400 baud on the xbee.
 
 #include "SoftwareSerial.h"
   
@@ -31,47 +32,38 @@
 RGBmatrixPanel matrix(A, B, C,  D,  CLK, LAT, OE, true, 64);
 
 // Must match the TX side!
-#define FREQ_BINS 32
+#define FREQ_BINS 21
 
 int freq[FREQ_BINS];
+int freq_hist[FREQ_BINS]={0};
 
 #define START_CHAR 's'
 
 // Color pallete for spectrum...cooler than just single green.
 uint16_t spectrum_colors[] = 
 {
-  matrix.Color444(15,0,0),   // index 0
-  matrix.Color444(13,1,0),   // index 1
-  matrix.Color444(12,3,0),   // index 2
-  matrix.Color444(10,4,0),   // index 3
-  matrix.Color444(9,6,0),   // index 4
-  matrix.Color444(7,7,0),   // index 5
-  matrix.Color444(6,9,0),   // index 6
-  matrix.Color444(4,10,0),   // index 7 
-  matrix.Color444(3,12,0),   // index 8
-  matrix.Color444(1,13,0),   // index 9
-  matrix.Color444(0,15,0),   // index 10
-  matrix.Color444(0,13,1),   // index 11
-  matrix.Color444(0,12,3),   // index 12 
-  matrix.Color444(0,10,4),   // index 13
-  matrix.Color444(0,9,6),   // index 14
-  matrix.Color444(0,7,7),   // index 15
-  matrix.Color444(0,6,9),   // index 16
-  matrix.Color444(0,4,10),   // index 17
-  matrix.Color444(0,3,12),   // index 18
-  matrix.Color444(0,1,13),   // index 19
-  matrix.Color444(0,0,15),   // index 20
-  matrix.Color444(1,0,13),   // index 21
-  matrix.Color444(3,0,12),   // index 22
-  matrix.Color444(4,0,10),   // index 23
-  matrix.Color444(6,0,9),   // index 24
-  matrix.Color444(7,0,7),   // index 25
-  matrix.Color444(9,0,6),   // index 26
-  matrix.Color444(10,0,4),   // index 27
-  matrix.Color444(11,0,3),   // index 28
-  matrix.Color444(12,0,2),   // index 29
-  matrix.Color444(13,0,1),   // index 30
-  matrix.Color444(15,0,0),   // index 31  
+  matrix.Color444(7,0,0),   // index 0
+  matrix.Color444(6,1,0),   // index 1
+  matrix.Color444(5,2,0),   // index 2
+  matrix.Color444(4,3,0),   // index 3
+  matrix.Color444(3,4,0),   // index 4
+  matrix.Color444(2,5,0),   // index 5
+  matrix.Color444(1,6,0),   // index 6
+  matrix.Color444(0,7,0),   // index 7 
+  matrix.Color444(0,6,1),   // index 8
+  matrix.Color444(0,5,2),   // index 9
+  matrix.Color444(0,4,3),   // index 10
+  matrix.Color444(0,3,4),   // index 11
+  matrix.Color444(0,2,5),   // index 12 
+  matrix.Color444(0,1,6),   // index 13
+  matrix.Color444(0,0,7),   // index 14
+  matrix.Color444(1,0,6),   // index 15
+  matrix.Color444(2,0,5),   // index 16
+  matrix.Color444(3,0,4),   // index 17
+  matrix.Color444(4,0,3),   // index 18
+  matrix.Color444(5,0,2),   // index 19
+  matrix.Color444(6,0,1),   // index 20
+  matrix.Color444(7,0,0),   // index 21
 };
 
 void setup() 
@@ -106,7 +98,7 @@ void print_freq_results( void )
   Serial.println("====================");
 }
 
-void display_freq( void )
+void display_freq_raw( void )
 {
   int i;
   int mag;
@@ -121,9 +113,47 @@ void display_freq( void )
   {
     mag = freq[i];
      
-    x = i*2;
+    x = i*3;
     
-    matrix.drawRect(x,32,2,0-mag, spectrum_colors[i]);
+    matrix.drawRect(x,32,3,0-mag, spectrum_colors[i]);
+  }
+
+  matrix.swapBuffers(true);
+ 
+}
+
+
+void display_freq_decay( void )
+{
+  int i;
+  int mag;
+  
+  int x;    
+
+  matrix.fillScreen(0);
+
+  // we have 32 freq bins, but I want to each bin to be 3 wide.
+  // This means I'm going from bins 1 to 21 (which gets us to 63)
+  for (i = 0; i < FREQ_BINS; i++)
+  {
+    mag = freq[i];
+        
+    // check if current magnitude is smaller than our recent history.   
+    if (mag < freq_hist[i])
+    {
+      // decay by 1...but only if we're not going negative
+      if (freq_hist[i]) 
+      {
+        mag = freq_hist[i] - 1;
+      }
+    }
+
+    // store new value...this will either be the new max or the new "decayed" value.
+    freq_hist[i] = mag;
+     
+    x = i*3;
+    
+    matrix.drawRect(x,32,3,0-mag, spectrum_colors[i]);
   }
 
   matrix.swapBuffers(true);
@@ -154,7 +184,7 @@ void loop()
          if (buff_index == FREQ_BINS)
          {
             //print_freq_results();
-            display_freq();
+            display_freq_decay();
             current_state = WAIT_FOR_BUFFER;
          }
       break;

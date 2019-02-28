@@ -1,6 +1,7 @@
 // This is the receive module for the frequency visualizer.
 // Brute force iteration:   display on 64x32, use mega.  Use  Serial1 (pins 18 and 19) for com with tx side.
 // Go to 21 bins for the cool rectangle effect.
+// Use FAST display.
 
 
 #include "SoftwareSerial.h"
@@ -9,7 +10,7 @@
 #include <Adafruit_GFX.h>   // Core graphics library
 #include <RGBmatrixPanel.h> // Hardware-specific library
 
-// Pin defines for the 32x32 RGB matrix.
+// Pin defines for the RGB matrix.
 #define CLK 11  
 #define LAT 10
 #define OE  9
@@ -30,7 +31,7 @@
 
 // Note "false" for double-buffering to consume less memory, or "true" for double-buffered.
 // Double-buffered makes updates look smoother.
-RGBmatrixPanel matrix(A, B, C,  D,  CLK, LAT, OE, true, 64);
+RGBmatrixPanel matrix(A, B, C,  D,  CLK, LAT, OE, false, 64);
 
 // Must match the TX side!
 #define FREQ_BINS 21
@@ -99,30 +100,6 @@ void print_freq_results( void )
   Serial.println("====================");
 }
 
-void display_freq_raw( void )
-{
-  int i;
-  int mag;
-  
-  int x;    
-
-  matrix.fillScreen(0);
-
-  // we have 32 freq bins, but I want to each bin to be 3 wide.
-  // This means I'm going from bins 1 to 21 (which gets us to 63)
-  for (i = 0; i < FREQ_BINS; i++)
-  {
-    mag = freq[i];
-     
-    x = i*3;
-    
-    matrix.drawRect(x,32,3,0-mag, spectrum_colors[i]);
-  }
-
-  matrix.swapBuffers(true);
- 
-}
-
 
 void display_freq_decay( void )
 {
@@ -130,36 +107,43 @@ void display_freq_decay( void )
   int mag;
   
   int x;    
+  int y;
 
-  matrix.fillScreen(0);
 
-  // we have 32 freq bins, but I want to each bin to be 3 wide.
-  // This means I'm going from bins 1 to 21 (which gets us to 63)
-  for (i = 0; i < FREQ_BINS; i++)
+  // we have 21 freq bins
+  for (i = 0; i < 21; i++)
   {
+    // figure out (and map) the current frequency bin range.
     mag = freq[i];
-        
-    // check if current magnitude is smaller than our recent history.   
-    if (mag < freq_hist[i])
-    {
-      // decay by 1...but only if we're not going negative
-      if (freq_hist[i]) 
-      {
-        mag = freq_hist[i] - 1;
-      }
-    }
 
-    // store new value...this will either be the new max or the new "decayed" value.
-    freq_hist[i] = mag;
-     
     x = i*3;
     
-    matrix.drawRect(x,32,3,0-mag, spectrum_colors[i]);
-  }
-
-  matrix.swapBuffers(true);
- 
+    // Just draw the deltas.  
+    
+    // The trick here:  mag and freq_hist go from 0 to 31.
+    // 0 on the display is the top-right...but we want it to be bottom right.  x stays the same, y needs to reflect. 
+    // Yes, this should really be 31, but our FFT never yields anything under 1.
+    y = 32-freq_hist[i];
+    
+    // If the bar is bigger, we need to extend the rectangle to the top...no erases needed.
+    if (mag > freq_hist[i])
+    {
+      matrix.fillRect(x,y,3,freq_hist[i]-mag, spectrum_colors[i]);
+      freq_hist[i] = mag;
+    }
+    else if (mag < freq_hist[i])
+    {
+      // in this case, we're going to decay just by one.  I can use a line for that.
+      matrix.drawLine(x,y-1,x+2,y-1,0);
+      freq_hist[i]--;
+    }
+    
+  } // end of loop over freq bins.
+     
+    
 }
+
+
 void loop() 
 {
   char c;
@@ -185,7 +169,7 @@ void loop()
          if (buff_index == FREQ_BINS)
          {
             //print_freq_results();
-            display_freq_raw();
+            display_freq_decay();
             current_state = WAIT_FOR_BUFFER;
          }
       break;
